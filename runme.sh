@@ -4,9 +4,6 @@ set -e
 # DDR_SPEED=2400,2600,2900,3000,3200
 # SERDES=8_5_2, 13_5_2, 20_5_2
 
-ARM_GCC_VERSION="gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"
-IFS='-' read SP1 SP2 SP3 SP4 SP5 <<< ${ARM_GCC_VERSION}
-ARM_GCC_SV="${SP3}-${SP4}"
 GIT_HASH=`git rev-parse --short HEAD`
 
 ###############################################################################
@@ -57,12 +54,19 @@ ROOTDIR=`pwd`
 PARALLEL=$(getconf _NPROCESSORS_ONLN) # Amount of parallel jobs for the builds
 SPEED=${SOC_SPEED}_${BUS_SPEED}_${DDR_SPEED}
 
-TOOLS="wget tar git make dd envsubst dtc iasl"
-
 HOST_ARCH=`arch`
-if [ "$HOST_ARCH" == "x86_64" ]; then 
-export CROSS_COMPILE=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
-export CROSS_COMPILE64=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
+if [ "$HOST_ARCH" == "aarch64" ]; then
+	TOOLS="tar git make dd envsubst dtc iasl"
+	export CROSS_COMPILE=
+	export CROSS_COMPILE64=
+	echo "Native aarch64 build, using system GCC"
+else
+	ARM_GCC_VERSION="gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"
+	IFS='-' read SP1 SP2 SP3 SP4 SP5 <<< ${ARM_GCC_VERSION}
+	ARM_GCC_SV="${SP3}-${SP4}"
+	TOOLS="wget tar git make dd envsubst dtc iasl"
+	export CROSS_COMPILE=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
+	export CROSS_COMPILE64=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
 fi
 export ARCH=arm64
 
@@ -103,7 +107,7 @@ if [[ ! -d $ROOTDIR/images ]]; then
 	mkdir $ROOTDIR/images
 fi
 
-if [[ ! -d $ROOTDIR/build/toolchain/${ARM_GCC_VERSION} && "$HOST_ARCH" == "x86_64" ]]; then
+if [[ -n "${ARM_GCC_VERSION}" && ! -d $ROOTDIR/build/toolchain/${ARM_GCC_VERSION} && "$HOST_ARCH" == "x86_64" ]]; then
 	mkdir -p $ROOTDIR/build/toolchain
 	cd $ROOTDIR/build/toolchain
 	wget https://developer.arm.com/-/media/Files/downloads/gnu-a/${ARM_GCC_SV}/binrel/${ARM_GCC_VERSION}.tar.xz

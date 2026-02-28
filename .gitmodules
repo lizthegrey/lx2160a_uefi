@@ -16,8 +16,8 @@
 	branch = 3.14.0-cex7
 [submodule "build/tianocore/edk2"]
 	path = build/tianocore/edk2
-	url = https://github.com/SolidRun/edk2.git
-	branch = edk2-stable202105-lx2160acex7
+	url = https://github.com/tianocore/edk2.git
+	branch = edk2-stable202602
 [submodule "build/tianocore/edk2-platforms"]
 	path = build/tianocore/edk2-platforms
 	url = https://github.com/SolidRun/edk2-platforms.git

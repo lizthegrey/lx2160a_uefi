@@ -211,9 +211,13 @@ cd $ROOTDIR/build/arm-trusted-firmware/
 rm -rf build
 
 if [ "x$SECURE_BOOT" != "x" ]; then
-make PLAT=lx2160acex7 all fip pbl RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin BOOT_MODE=${BOOT_MODE} SPD=opteed ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
+make PLAT=lx2160acex7 all fip pbl fip_ddr \
+  DDR_PHY_BIN_PATH=$ROOTDIR/build/ddr-phy-binary/lx2160a \
+  RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin BOOT_MODE=${BOOT_MODE} SPD=opteed ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
 else
-make PLAT=lx2160acex7 all fip pbl RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin TRUSTED_BOARD_BOOT=0 GENERATE_COT=0 BOOT_MODE=${BOOT_MODE} SECURE_BOOT=false ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
+make PLAT=lx2160acex7 all fip pbl fip_ddr \
+  DDR_PHY_BIN_PATH=$ROOTDIR/build/ddr-phy-binary/lx2160a \
+  RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin TRUSTED_BOARD_BOOT=0 GENERATE_COT=0 BOOT_MODE=${BOOT_MODE} SECURE_BOOT=false ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
 fi
 
 cd $ROOTDIR/
@@ -222,7 +226,7 @@ IMG=lx2160acex7_${SPEED}_${SERDES}_${BOOT_MODE}_secure_${GIT_HASH}.img
 else
 IMG=lx2160acex7_${SPEED}_${SERDES}_${BOOT_MODE}_${GIT_HASH}.img
 fi
-truncate -s 8M $ROOTDIR/images/${IMG}
+truncate -s 9M $ROOTDIR/images/${IMG}
 
 # RCW+PBI+BL2 at block 8
 if [ "x$BOOT_MODE" == "xflexspi_nor" ]; then
@@ -231,10 +235,10 @@ elif [ "x$BOOT_MODE" == "xsd" ]; then
 dd if=$ROOTDIR/build/arm-trusted-firmware/build/lx2160acex7/release/bl2_sd.pbl of=images/${IMG} bs=512 seek=8 conv=sparse
 fi
 
-# DDR PHY FIP at 0x100
-dd if=$ROOTDIR/build/ddr-phy-binary/lx2160a/fip_ddr.bin of=images/${IMG} bs=512 seek=256 conv=notrunc
-
-# FIP (BL31+BL32+BL33) at 0x800
+# FIP (BL31+BL32+BL33) at block 2048 (0x100000)
 dd if=$ROOTDIR/build/arm-trusted-firmware/build/lx2160acex7/release/fip.bin of=images/${IMG} bs=512 seek=2048 conv=notrunc
+
+# DDR PHY FIP at block 16384 (0x800000)
+dd if=$ROOTDIR/build/arm-trusted-firmware/build/lx2160acex7/release/ddr_fip.bin of=images/${IMG} bs=512 seek=16384 conv=notrunc
 
 echo -e "\r\n\r\nBuilt: images/${IMG}"

@@ -12,8 +12,8 @@
 	branch = LSDK-20.04-sr
 [submodule "build/optee_os"]
 	path = build/optee_os
-	url = https://github.com/SolidRun/optee_os.git
-	branch = 3.14.0-cex7
+	url = https://github.com/lizthegrey/optee_os.git
+	branch = lizf.4.9.0-cex7
 [submodule "build/tianocore/edk2"]
 	path = build/tianocore/edk2
 	url = https://github.com/lizthegrey/edk2.git

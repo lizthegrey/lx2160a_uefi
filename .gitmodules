@@ -8,8 +8,8 @@
 	branch = master
 [submodule "build/rcw"]
 	path = build/rcw
-	url = https://github.com/SolidRun/rcw.git
-	branch = LSDK-20.04-sr
+	url = https://github.com/lizthegrey/rcw.git
+	branch = lizf.nxp-lf6.6.52-cex7
 [submodule "build/optee_os"]
 	path = build/optee_os
 	url = https://github.com/lizthegrey/optee_os.git

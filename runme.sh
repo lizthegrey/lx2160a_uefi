@@ -25,7 +25,11 @@ if [ "x$SOC_SPEED" == "x" ]; then
 	SOC_SPEED=2000
 fi
 if [ "x$BUS_SPEED" == "x" ]; then
-	BUS_SPEED=700
+	if [ "$SOC_SPEED" == "2200" ]; then
+		BUS_SPEED=750
+	else
+		BUS_SPEED=700
+	fi
 fi
 if [ "x$SERDES" == "x" ]; then
 	SERDES=8_5_2
@@ -36,6 +40,13 @@ fi
 if [ "x$BOOT_MODE" == "x" ]; then
 	BOOT_MODE=sd
 fi
+# Map BOOT_MODE to RCW boot source suffix
+case "$BOOT_MODE" in
+	sd)           RCW_BOOTSOURCE=sdhc ;;
+	flexspi_nor)  RCW_BOOTSOURCE=xspi ;;
+	auto)         RCW_BOOTSOURCE=auto ;;
+	*)            echo "Unknown BOOT_MODE: $BOOT_MODE"; exit 1 ;;
+esac
 if [ "x$XMP_PROFILE" != "x" ]; then
 	XMP_PROFILE="XMP_PROFILE=${XMP_PROFILE}"
 fi
@@ -56,7 +67,7 @@ SPEED=${SOC_SPEED}_${BUS_SPEED}_${DDR_SPEED}
 
 HOST_ARCH=`arch`
 if [ "$HOST_ARCH" == "aarch64" ]; then
-	TOOLS="tar git make dd envsubst dtc iasl"
+	TOOLS="tar git make dd dtc iasl python3"
 	export CROSS_COMPILE=
 	export CROSS_COMPILE64=
 	echo "Native aarch64 build, using system GCC"
@@ -64,7 +75,7 @@ else
 	ARM_GCC_VERSION="gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"
 	IFS='-' read SP1 SP2 SP3 SP4 SP5 <<< ${ARM_GCC_VERSION}
 	ARM_GCC_SV="${SP3}-${SP4}"
-	TOOLS="wget tar git make dd envsubst dtc iasl"
+	TOOLS="wget tar git make dd dtc iasl python3"
 	export CROSS_COMPILE=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
 	export CROSS_COMPILE64=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
 fi
@@ -143,36 +154,17 @@ fi
 # building sources
 ###############################################################################
 echo "Building RCW"
-cd $ROOTDIR/build/rcw/lx2160acex7
-export SP1 SP2 SP3
-IFS=_ read SP1 SP2 SP3 <<< $SERDES
-if [ "x$SP1" == "4" ]; then
-	export SRC1="0"
-	export SCL1="0"
-	export SPD1="1"
-else
-	export SRC1="1"
-	export SCL1="2"
-	export SPD1="1"
+cd $ROOTDIR/build/rcw
+make -j${PARALLEL} BOARDS="lx2160acex7_rev2"
+
+RCW_BIN=$ROOTDIR/build/rcw/lx2160acex7_rev2/clearfog-cx/rcw_${SOC_SPEED}_${BUS_SPEED}_${DDR_SPEED}_${SERDES}_${RCW_BOOTSOURCE}.bin
+if [ ! -f "$RCW_BIN" ]; then
+	echo "ERROR: RCW binary not found: $RCW_BIN"
+	echo "Available configs:"
+	ls $ROOTDIR/build/rcw/lx2160acex7_rev2/clearfog-cx/rcw_*.bin 2>/dev/null || echo "  (none built)"
+	exit 1
 fi
-
-if [ "x$BIFURCATE_PCIE" != "x" ]; then
-export SP3="3"
-fi
-
-envsubst < configs/lx2160a_serdes.def > configs/lx2160a_serdes.rcwi
-
-IFS=_ read CPU SYS MEM <<< $SPEED
-export CPU=${CPU::2}
-export SYS=$(( 2*${SYS::2} ))
-export SYS=${SYS::-1}
-export MEM=${MEM::2}
-
-envsubst < configs/lx2160a_timings.def > configs/lx2160a_timings.rcwi
-
-# Always rebuild the rcws to catch timing changes
-rm -f rcws/*.bin
-make -j${PARALLEL}
+echo "Using RCW: $RCW_BIN"
 
 echo "Build UEFI"
 cd $ROOTDIR/build/tianocore
@@ -213,11 +205,11 @@ rm -rf build
 if [ "x$SECURE_BOOT" != "x" ]; then
 make PLAT=lx2160acex7 all fip pbl fip_ddr \
   DDR_PHY_BIN_PATH=$ROOTDIR/build/ddr-phy-binary/lx2160a \
-  RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin BOOT_MODE=${BOOT_MODE} SPD=opteed ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
+  RCW=${RCW_BIN} BOOT_MODE=${BOOT_MODE} SPD=opteed ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
 else
 make PLAT=lx2160acex7 all fip pbl fip_ddr \
   DDR_PHY_BIN_PATH=$ROOTDIR/build/ddr-phy-binary/lx2160a \
-  RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin TRUSTED_BOARD_BOOT=0 GENERATE_COT=0 BOOT_MODE=${BOOT_MODE} SECURE_BOOT=false ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
+  RCW=${RCW_BIN} TRUSTED_BOARD_BOOT=0 GENERATE_COT=0 BOOT_MODE=${BOOT_MODE} SECURE_BOOT=false ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
 fi
 
 cd $ROOTDIR/

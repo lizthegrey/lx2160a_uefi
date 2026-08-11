@@ -1,5 +1,5 @@
 # use debian base
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 
 # update
 RUN set -e; \
@@ -12,7 +12,7 @@ RUN apt-get update ; apt-get -y --no-install-recommends install \
 	sudo git gettext-base uuid-dev bc gcc g++ python3 \ 
 	libc6-dev libssl-dev python3-distutils ca-certificates
 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.7 1
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
 
 # build environment
 ARG ddr=2400

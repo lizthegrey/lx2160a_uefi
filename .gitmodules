@@ -1,7 +1,7 @@
 [submodule "build/arm-trusted-firmware"]
 	path = build/arm-trusted-firmware
 	url = https://github.com/lizthegrey/arm-trusted-firmware.git
-	branch = lizf.nxp-v2.10-cex7
+	branch = lizf.nxp-v2.12-cex7
 [submodule "build/ddr-phy-binary"]
 	path = build/ddr-phy-binary
 	url = https://github.com/NXP/ddr-phy-binary.git
@@ -17,7 +17,7 @@
 [submodule "build/tianocore/edk2"]
 	path = build/tianocore/edk2
 	url = https://github.com/lizthegrey/edk2.git
-	branch = lizf.edk2-stable202602
+	branch = lizf.edk2-stable202608
 [submodule "build/tianocore/edk2-platforms"]
 	path = build/tianocore/edk2-platforms
 	url = https://github.com/lizthegrey/edk2-platforms.git

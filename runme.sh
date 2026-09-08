@@ -4,9 +4,6 @@ set -e
 # DDR_SPEED=2400,2600,2900,3000,3200
 # SERDES=8_5_2, 13_5_2, 20_5_2
 
-ARM_GCC_VERSION="gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"
-IFS='-' read SP1 SP2 SP3 SP4 SP5 <<< ${ARM_GCC_VERSION}
-ARM_GCC_SV="${SP3}-${SP4}"
 GIT_HASH=`git rev-parse --short HEAD`
 
 ###############################################################################
@@ -28,7 +25,11 @@ if [ "x$SOC_SPEED" == "x" ]; then
 	SOC_SPEED=2000
 fi
 if [ "x$BUS_SPEED" == "x" ]; then
-	BUS_SPEED=700
+	if [ "$SOC_SPEED" == "2200" ]; then
+		BUS_SPEED=750
+	else
+		BUS_SPEED=700
+	fi
 fi
 if [ "x$SERDES" == "x" ]; then
 	SERDES=8_5_2
@@ -39,6 +40,13 @@ fi
 if [ "x$BOOT_MODE" == "x" ]; then
 	BOOT_MODE=sd
 fi
+# Map BOOT_MODE to RCW boot source suffix
+case "$BOOT_MODE" in
+	sd)           RCW_BOOTSOURCE=sdhc ;;
+	flexspi_nor)  RCW_BOOTSOURCE=xspi ;;
+	auto)         RCW_BOOTSOURCE=auto ;;
+	*)            echo "Unknown BOOT_MODE: $BOOT_MODE"; exit 1 ;;
+esac
 if [ "x$XMP_PROFILE" != "x" ]; then
 	XMP_PROFILE="XMP_PROFILE=${XMP_PROFILE}"
 fi
@@ -57,12 +65,19 @@ ROOTDIR=`pwd`
 PARALLEL=$(getconf _NPROCESSORS_ONLN) # Amount of parallel jobs for the builds
 SPEED=${SOC_SPEED}_${BUS_SPEED}_${DDR_SPEED}
 
-TOOLS="wget tar git make dd envsubst dtc iasl"
-
 HOST_ARCH=`arch`
-if [ "$HOST_ARCH" == "x86_64" ]; then 
-export CROSS_COMPILE=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
-export CROSS_COMPILE64=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
+if [ "$HOST_ARCH" == "aarch64" ]; then
+	TOOLS="tar git make dd dtc iasl python3"
+	export CROSS_COMPILE=
+	export CROSS_COMPILE64=
+	echo "Native aarch64 build, using system GCC"
+else
+	ARM_GCC_VERSION="gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"
+	IFS='-' read SP1 SP2 SP3 SP4 SP5 <<< ${ARM_GCC_VERSION}
+	ARM_GCC_SV="${SP3}-${SP4}"
+	TOOLS="wget tar git make dd dtc iasl python3"
+	export CROSS_COMPILE=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
+	export CROSS_COMPILE64=$ROOTDIR/build/toolchain/${ARM_GCC_VERSION}/bin/aarch64-none-linux-gnu-
 fi
 export ARCH=arm64
 
@@ -103,7 +118,7 @@ if [[ ! -d $ROOTDIR/images ]]; then
 	mkdir $ROOTDIR/images
 fi
 
-if [[ ! -d $ROOTDIR/build/toolchain/${ARM_GCC_VERSION} && "$HOST_ARCH" == "x86_64" ]]; then
+if [[ -n "${ARM_GCC_VERSION}" && ! -d $ROOTDIR/build/toolchain/${ARM_GCC_VERSION} && "$HOST_ARCH" == "x86_64" ]]; then
 	mkdir -p $ROOTDIR/build/toolchain
 	cd $ROOTDIR/build/toolchain
 	wget https://developer.arm.com/-/media/Files/downloads/gnu-a/${ARM_GCC_SV}/binrel/${ARM_GCC_VERSION}.tar.xz
@@ -139,61 +154,42 @@ fi
 # building sources
 ###############################################################################
 echo "Building RCW"
-cd $ROOTDIR/build/rcw/lx2160acex7
-export SP1 SP2 SP3
-IFS=_ read SP1 SP2 SP3 <<< $SERDES
-if [ "x$SP1" == "4" ]; then
-	export SRC1="0"
-	export SCL1="0"
-	export SPD1="1"
-else
-	export SRC1="1"
-	export SCL1="2"
-	export SPD1="1"
+cd $ROOTDIR/build/rcw
+make -j${PARALLEL} BOARDS="lx2160acex7_rev2"
+
+RCW_BIN=$ROOTDIR/build/rcw/lx2160acex7_rev2/clearfog-cx/rcw_${SOC_SPEED}_${BUS_SPEED}_${DDR_SPEED}_${SERDES}_${RCW_BOOTSOURCE}.bin
+if [ ! -f "$RCW_BIN" ]; then
+	echo "ERROR: RCW binary not found: $RCW_BIN"
+	echo "Available configs:"
+	ls $ROOTDIR/build/rcw/lx2160acex7_rev2/clearfog-cx/rcw_*.bin 2>/dev/null || echo "  (none built)"
+	exit 1
 fi
-
-if [ "x$BIFURCATE_PCIE" != "x" ]; then
-export SP3="3"
-fi
-
-envsubst < configs/lx2160a_serdes.def > configs/lx2160a_serdes.rcwi
-
-IFS=_ read CPU SYS MEM <<< $SPEED
-export CPU=${CPU::2}
-export SYS=$(( 2*${SYS::2} ))
-export SYS=${SYS::-1}
-export MEM=${MEM::2}
-
-envsubst < configs/lx2160a_timings.def > configs/lx2160a_timings.rcwi
-
-# Always rebuild the rcws to catch timing changes
-rm -f rcws/*.bin
-make -j${PARALLEL}
+echo "Using RCW: $RCW_BIN"
 
 echo "Build UEFI"
 cd $ROOTDIR/build/tianocore
 # set the aarch64-linux-gnu cross compiler to the oldie 4.9 linaro toolchain (UEFI build requirement)
 PYTHON_COMMAND=/usr/bin/python3 make -C $ROOTDIR/build/tianocore/edk2/BaseTools
 export ARCH=arm
-export GCC5_AARCH64_PREFIX=$CROSS_COMPILE
+export GCC_AARCH64_PREFIX=$CROSS_COMPILE
 export WORKSPACE=$ROOTDIR/build/tianocore
 export PACKAGES_PATH=$WORKSPACE/edk2:$WORKSPACE/edk2-platforms:$WORKSPACE/edk2-non-osi
 source  edk2/edksetup.sh
 
 if [ "x$SECURE_BOOT" != "x" ]; then
-build -p "edk2-platforms/Platform/SolidRun/LX2160aCex7/LX2160aCex7.dsc" -a AARCH64 -t GCC5 -b ${UEFI_RELEASE} -y build.log -D SECURE_BOOT ${X86EMU} ${AMDGOP} ${BIFURPCI} 
-export BL33=$ROOTDIR/build/tianocore/Build/LX2160aCex7/${UEFI_RELEASE}_GCC5/FV/LX2160ACEX7_EFI.fd
-build -p "edk2-platforms/Platform/SolidRun/StandAloneMm/StandaloneMm.dsc" -a AARCH64 -t GCC5 -b ${UEFI_RELEASE} -y build-mm.log
-export CFG_STMM_PATH=$ROOTDIR/build/tianocore/Build/NXPMmStandalone/${UEFI_RELEASE}_GCC5/FV/BL32_AP_MM.fd
+build -p "edk2-platforms/Platform/SolidRun/LX2160aCex7/LX2160aCex7.dsc" -a AARCH64 -t GCC -b ${UEFI_RELEASE} -y build.log -D SECURE_BOOT ${X86EMU} ${AMDGOP} ${BIFURPCI} 
+export BL33=$ROOTDIR/build/tianocore/Build/LX2160aCex7/${UEFI_RELEASE}_GCC/FV/LX2160ACEX7_EFI.fd
+build -p "edk2-platforms/Platform/SolidRun/StandAloneMm/StandaloneMm.dsc" -a AARCH64 -t GCC -b ${UEFI_RELEASE} -y build-mm.log
+export CFG_STMM_PATH=$ROOTDIR/build/tianocore/Build/NXPMmStandalone/${UEFI_RELEASE}_GCC/FV/BL32_AP_MM.fd
 
 echo "Build optee_os"
 cd $ROOTDIR/build/optee_os
-make -j${PARALLEL} CFG_ARM64_core=y PLATFORM=ls-lx2160ardb CFG_SCTLR_ALIGNMENT_CHECK=n CFG_TEE_CORE_LOG_LEVEL=0 CFG_TEE_TA_LOG_LEVEL=0 CFG_WITH_STMM_SP=y
+make -j${PARALLEL} CFG_ARM64_core=y PLATFORM=ls-lx2160ardb CFG_SCTLR_ALIGNMENT_CHECK=n CFG_TEE_CORE_LOG_LEVEL=2 CFG_TEE_TA_LOG_LEVEL=2 CFG_WITH_STMM_SP=y CFG_STMM_HEAP_PAGE_COUNT=800
 ${CROSS_COMPILE}objcopy -v -O binary out/arm-plat-ls/core/tee.elf out/arm-plat-ls/core/tee.bin 
 export BL32=$ROOTDIR/build/optee_os/out/arm-plat-ls/core/tee.bin
 else
-build -p "edk2-platforms/Platform/SolidRun/LX2160aCex7/LX2160aCex7.dsc" -a AARCH64 -t GCC5 -b ${UEFI_RELEASE} -y build.log ${X86EMU} ${AMDGOP} ${BIFURPCI}
-export BL33=$ROOTDIR/build/tianocore/Build/LX2160aCex7/${UEFI_RELEASE}_GCC5/FV/LX2160ACEX7_EFI.fd
+build -p "edk2-platforms/Platform/SolidRun/LX2160aCex7/LX2160aCex7.dsc" -a AARCH64 -t GCC -b ${UEFI_RELEASE} -y build.log ${X86EMU} ${AMDGOP} ${BIFURPCI}
+export BL33=$ROOTDIR/build/tianocore/Build/LX2160aCex7/${UEFI_RELEASE}_GCC/FV/LX2160ACEX7_EFI.fd
 fi
 
 export ARCH=arm64 # While building UEFI ARCH is unset
@@ -207,9 +203,13 @@ cd $ROOTDIR/build/arm-trusted-firmware/
 rm -rf build
 
 if [ "x$SECURE_BOOT" != "x" ]; then
-make PLAT=lx2160acex7 all fip pbl RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin BOOT_MODE=${BOOT_MODE} SPD=opteed ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
+make PLAT=lx2160acex7 all fip pbl fip_ddr \
+  DDR_PHY_BIN_PATH=$ROOTDIR/build/ddr-phy-binary/lx2160a \
+  RCW=${RCW_BIN} BOOT_MODE=${BOOT_MODE} SPD=opteed ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
 else
-make PLAT=lx2160acex7 all fip pbl RCW=$ROOTDIR/build/rcw/lx2160acex7/rcws/rcw_lx2160acex7.bin TRUSTED_BOARD_BOOT=0 GENERATE_COT=0 BOOT_MODE=${BOOT_MODE} SECURE_BOOT=false ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
+make PLAT=lx2160acex7 all fip pbl fip_ddr \
+  DDR_PHY_BIN_PATH=$ROOTDIR/build/ddr-phy-binary/lx2160a \
+  RCW=${RCW_BIN} TRUSTED_BOARD_BOOT=0 GENERATE_COT=0 BOOT_MODE=${BOOT_MODE} SECURE_BOOT=false ${XMP_PROFILE} ENABLE_STACK_PROTECTION=1
 fi
 
 cd $ROOTDIR/
@@ -218,7 +218,7 @@ IMG=lx2160acex7_${SPEED}_${SERDES}_${BOOT_MODE}_secure_${GIT_HASH}.img
 else
 IMG=lx2160acex7_${SPEED}_${SERDES}_${BOOT_MODE}_${GIT_HASH}.img
 fi
-truncate -s 8M $ROOTDIR/images/${IMG}
+truncate -s 9M $ROOTDIR/images/${IMG}
 
 # RCW+PBI+BL2 at block 8
 if [ "x$BOOT_MODE" == "xflexspi_nor" ]; then
@@ -227,10 +227,10 @@ elif [ "x$BOOT_MODE" == "xsd" ]; then
 dd if=$ROOTDIR/build/arm-trusted-firmware/build/lx2160acex7/release/bl2_sd.pbl of=images/${IMG} bs=512 seek=8 conv=sparse
 fi
 
-# DDR PHY FIP at 0x100
-dd if=$ROOTDIR/build/ddr-phy-binary/lx2160a/fip_ddr.bin of=images/${IMG} bs=512 seek=256 conv=notrunc
-
-# FIP (BL31+BL32+BL33) at 0x800
+# FIP (BL31+BL32+BL33) at block 2048 (0x100000)
 dd if=$ROOTDIR/build/arm-trusted-firmware/build/lx2160acex7/release/fip.bin of=images/${IMG} bs=512 seek=2048 conv=notrunc
+
+# DDR PHY FIP at block 16384 (0x800000)
+dd if=$ROOTDIR/build/arm-trusted-firmware/build/lx2160acex7/release/ddr_fip.bin of=images/${IMG} bs=512 seek=16384 conv=notrunc
 
 echo -e "\r\n\r\nBuilt: images/${IMG}"

@@ -1,28 +1,28 @@
 [submodule "build/arm-trusted-firmware"]
 	path = build/arm-trusted-firmware
-	url = https://github.com/SolidRun/arm-trusted-firmware.git
-	branch = v2.5-lx2160acex7
+	url = https://github.com/lizthegrey/arm-trusted-firmware.git
+	branch = lizf.nxp-v2.12-cex7
 [submodule "build/ddr-phy-binary"]
 	path = build/ddr-phy-binary
 	url = https://github.com/NXP/ddr-phy-binary.git
 	branch = master
 [submodule "build/rcw"]
 	path = build/rcw
-	url = https://github.com/SolidRun/rcw.git
-	branch = LSDK-20.04-sr
+	url = https://github.com/lizthegrey/rcw.git
+	branch = lizf.nxp-lf6.6.52-cex7
 [submodule "build/optee_os"]
 	path = build/optee_os
-	url = https://github.com/SolidRun/optee_os.git
-	branch = 3.14.0-cex7
+	url = https://github.com/lizthegrey/optee_os.git
+	branch = lizf.4.9.0-cex7
 [submodule "build/tianocore/edk2"]
 	path = build/tianocore/edk2
-	url = https://github.com/SolidRun/edk2.git
-	branch = edk2-stable202105-lx2160acex7
+	url = https://github.com/lizthegrey/edk2.git
+	branch = lizf.edk2-stable202608
 [submodule "build/tianocore/edk2-platforms"]
 	path = build/tianocore/edk2-platforms
-	url = https://github.com/SolidRun/edk2-platforms.git
-	branch = edk2-stable202105-lx2160acex7
+	url = https://github.com/lizthegrey/edk2-platforms.git
+	branch = lizf.upstream-rebase
 [submodule "build/tianocore/edk2-non-osi"]
 	path = build/tianocore/edk2-non-osi
-	url = https://github.com/SolidRun/edk2-non-osi.git
-	branch = edk2-stable202105-lx2160acex7
+	url = https://github.com/lizthegrey/edk2-non-osi.git
+	branch = lizf.upstream-rebase

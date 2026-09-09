@@ -71,6 +71,12 @@ if [ "$HOST_ARCH" == "aarch64" ]; then
 	export CROSS_COMPILE=
 	export CROSS_COMPILE64=
 	echo "Native aarch64 build, using system GCC"
+elif [ "x$CROSS_COMPILE" != "x" ]; then
+	# Caller-supplied cross toolchain, e.g. CROSS_COMPILE=aarch64-linux-gnu-
+	# from Ubuntu's gcc-aarch64-linux-gnu package. No toolchain download.
+	TOOLS="tar git make dd dtc iasl python3 ${CROSS_COMPILE}gcc"
+	export CROSS_COMPILE64=$CROSS_COMPILE
+	echo "Cross build, using CROSS_COMPILE=$CROSS_COMPILE"
 else
 	ARM_GCC_VERSION="gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"
 	IFS='-' read SP1 SP2 SP3 SP4 SP5 <<< ${ARM_GCC_VERSION}
